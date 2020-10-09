@@ -395,13 +395,16 @@ class ServerlessAppsyncPlugin {
     if (this.hasApiKeyAuth(config)) {
       const logicalIdGraphQLApi = this.getLogicalId(config, RESOURCE_API);
       const logicalIdApiKey = this.getLogicalId(config, RESOURCE_API_KEY);
+      console.log(`Current date: ${new Date()}`)
+      const expires = Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60)
+      console.log(`Expires: ${expires}`)
       return {
         [logicalIdApiKey]: {
           Type: 'AWS::AppSync::ApiKey',
           Properties: {
             ApiId: { 'Fn::GetAtt': [logicalIdGraphQLApi, 'ApiId'] },
             Description: `serverless-appsync-plugin: AppSync API Key for ${logicalIdApiKey}`,
-            Expires: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60),
+            Expires: expires,
           },
         },
       };
