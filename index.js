@@ -14,6 +14,7 @@ const RESOURCE_API_KEY = "GraphQlApiKeyDefault";
 const RESOURCE_SCHEMA = "GraphQlSchema";
 const RESOURCE_URL = "GraphQlApiUrl";
 const RESOURCE_API_ID = "GraphQlApiId";
+var ntpClient = require('ntp-client');
 
 class ServerlessAppsyncPlugin {
   constructor(serverless, options) {
@@ -75,6 +76,17 @@ class ServerlessAppsyncPlugin {
       throw new this.serverless.classes.Error(`serverless-appsync: ${command} `
         + `is no longer supported. See ${MIGRATION_DOCS} for more information`);
     };
+
+    this.getServerTime = () => new Promise((resolve, reject) => {
+      ntpClient.getNetworkTime("pool.ntp.org", 123, function(err, date) {
+        if(err) {
+          reject(err);
+          return;
+        }
+
+        resolve(date);
+      });
+    });
     // Issue 159 - as of Serverless 1.12.0, before:deploy:initialize is replaced
     // by package:initialize.
     this.hooks = {
@@ -267,13 +279,13 @@ class ServerlessAppsyncPlugin {
       .then(() => new Promise(() => {}));
   }
 
-  addResources() {
+  async addResources() {
     const config = this.loadConfig();
 
     const resources = this.serverless.service.provider.compiledCloudFormationTemplate.Resources;
     const outputs = this.serverless.service.provider.compiledCloudFormationTemplate.Outputs;
 
-    config.forEach(apiConfig => {
+    for (const apiConfig in config) {
       if (apiConfig.apiId) {
         this.serverless.cli.log('WARNING: serverless-appsync has been updated in a breaking way and your '
           + 'service is configured using a reference to an existing apiKey in '
@@ -284,7 +296,7 @@ class ServerlessAppsyncPlugin {
 
 
       Object.assign(resources, this.getGraphQlApiEndpointResource(apiConfig));
-      Object.assign(resources, this.getApiKeyResources(apiConfig));
+      Object.assign(resources, await this.getApiKeyResources(apiConfig));
       Object.assign(resources, this.getGraphQLSchemaResource(apiConfig));
       Object.assign(resources, this.getCloudWatchLogsRole(apiConfig));
       Object.assign(resources, this.getDataSourceIamRolesResouces(apiConfig));
@@ -294,7 +306,7 @@ class ServerlessAppsyncPlugin {
 
       Object.assign(outputs, this.getGraphQlApiOutputs(apiConfig));
       Object.assign(outputs, this.getApiKeyOutputs(apiConfig));
-    });
+    };
   }
 
   getUserPoolConfig(provider, region) {
@@ -391,12 +403,13 @@ class ServerlessAppsyncPlugin {
     return false;
   }
 
-  getApiKeyResources(config) {
+  async getApiKeyResources(config) {
     if (this.hasApiKeyAuth(config)) {
       const logicalIdGraphQLApi = this.getLogicalId(config, RESOURCE_API);
       const logicalIdApiKey = this.getLogicalId(config, RESOURCE_API_KEY);
-      console.log(`Current date: ${new Date()}`)
-      const expires = Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60)
+      const currentDate = await this.getServerTime()
+      console.log(`Current date: ${+currentDate}`)
+      const expires = Math.floor((+currentDate) / 1000) + (365 * 24 * 60 * 60)
       console.log(`Expires: ${expires}`)
       return {
         [logicalIdApiKey]: {
